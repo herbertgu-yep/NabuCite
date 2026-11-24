@@ -1,0 +1,118 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nabucite}
+      POSTGRES_DB: ${POSTGRES_DB:-nabucite}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in backend/.env}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  object-store:
+    build: ./infra/minio
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: nabucite
+      MINIO_ROOT_PASSWORD: ${S3_PASSWORD:-}
+    ports: ["127.0.0.1:${S3_PORT:-59000}:9000"]
+    volumes: ["pdfs:/data"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9000/minio/health/ready"]
+      interval: 5s
+      retries: 30
+      timeout: 5s
+  broker:
+    image: rabbitmq:4-alpine
+    hostname: nabucite-broker
+    environment:
+      RABBITMQ_DEFAULT_USER: nabucite
+      RABBITMQ_DEFAULT_PASS: ${RABBIT_PASSWORD:-}
+    ports: ["127.0.0.1:${RABBIT_PORT:-55672}:5672"]
+    volumes: ["queue:/var/lib/rabbitmq"]
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      retries: 30
+      timeout: 5s
+  search:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.17.4
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.enabled: "false"
+      xpack.security.transport.ssl.enabled: "false"
+      ELASTIC_PASSWORD: ${SEARCH_PASSWORD:-}
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports: ["127.0.0.1:${SEARCH_PORT:-59200}:9200"]
+    volumes: ["index:/usr/share/elasticsearch/data"]
+    healthcheck:
+      test: ["CMD-SHELL", 'curl -sf -u "elastic:$$ELASTIC_PASSWORD" "localhost:9200/_cluster/health?wait_for_status=yellow" >/dev/null']
+      interval: 5s
+      retries: 60
+      timeout: 5s
+  milvus:
+    image: milvusdb/milvus:v2.5.10
+    profiles: ["vector"]
+    command: ["milvus","run","standalone"]
+    environment:
+      ETCD_USE_EMBED: "true"
+      ETCD_DATA_DIR: /var/lib/milvus/etcd
+      COMMON_STORAGETYPE: local
+    ports: ["127.0.0.1:19530:19530"]
+    volumes: ["vectors:/var/lib/milvus"]
+    healthcheck:
+      test: ["CMD","curl","-f","http://localhost:9091/healthz"]
+      interval: 10s
+      retries: 20
+      timeout: 5s
+  prometheus:
+    image: prom/prometheus:v3.4.1
+    profiles: ["monitoring"]
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    ports: ["127.0.0.1:59090:9090"]
+    volumes: ["./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro","./infra/monitoring/targets:/targets:ro"]
+  grafana:
+    image: grafana/grafana:12.0.2
+    profiles: ["monitoring"]
+    ports: ["127.0.0.1:53000:3000"]
+    volumes: ["./infra/monitoring/provisioning:/etc/grafana/provisioning:ro","./infra/monitoring/dashboards:/boards:ro","grafana:/var/lib/grafana"]
+  ingest-worker:
+    build:
+      context: backend
+      dockerfile: worker.Dockerfile
+      args:
+        WORKER_PIP_INDEX_URL: ${WORKER_PIP_INDEX_URL:-https://pypi.org/simple}
+    restart: unless-stopped
+    environment:
+      MILVUS_URL: http://milvus:19530
+      RETRIEVAL_STRATEGY: ${RETRIEVAL_STRATEGY:-bm25}
+      MODEL_API_KEY: ${MODEL_API_KEY:-}
+      MODEL_BASE_URL: ${MODEL_BASE_URL}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL}
+      VECTOR_NAMESPACE: ${VECTOR_NAMESPACE:-main}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB:-nabucite}
+      POSTGRES_USER: ${POSTGRES_USER:-nabucite}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      S3_ENDPOINT: http://object-store:9000
+      S3_PASSWORD: ${S3_PASSWORD:-}
+      SEARCH_PASSWORD: ${SEARCH_PASSWORD:-}
+      ELASTICSEARCH_URL: http://search:9200
+      BROKER_URL: amqp://nabucite:${RABBIT_PASSWORD:-}@broker:5672//
+    volumes: ["parser-models:/models"]
+volumes:
+  pgdata:
+  pdfs:
+  index:
+  queue:
+  parser-models:
+  vectors:
+  grafana:

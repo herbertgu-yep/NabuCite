@@ -1,0 +1,5 @@
+apiVersion: 1
+providers:
+  - name: NabuCite
+    type: file
+    options: {path: /boards}

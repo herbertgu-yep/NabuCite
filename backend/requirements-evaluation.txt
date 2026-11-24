@@ -1,0 +1,4 @@
+-r requirements-test.txt
+milvus-lite==3.2.2
+locust==2.42.1
+testcontainers[postgres]==4.13.2

@@ -1,0 +1,73 @@
+{
+  "uid": "workbench",
+  "title": "NabuCite",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "阶段 P95（秒）",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "nabucite"
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(.95,sum by(le,stage)(rate(nabucite_stage_seconds_bucket[5m])))",
+          "refId": "A",
+          "legendFormat": "{{stage}} {{purpose}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "错误率",
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "nabucite"
+      },
+      "targets": [
+        {
+          "expr": "sum by(stage)(rate(nabucite_failures_total[5m]))",
+          "refId": "A",
+          "legendFormat": "{{stage}} {{purpose}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "上游调用率",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "nabucite"
+      },
+      "targets": [
+        {
+          "expr": "sum by(purpose)(rate(nabucite_upstream_calls_total[5m]))",
+          "refId": "A",
+          "legendFormat": "{{stage}} {{purpose}}"
+        }
+      ]
+    }
+  ]
+}

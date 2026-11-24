@@ -1,0 +1,6 @@
+*
+!*.py
+!requirements.txt
+!worker.Dockerfile
+evaluate_answers.py
+evaluate_snapshot.py

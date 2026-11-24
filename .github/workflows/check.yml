@@ -1,0 +1,28 @@
+name: checks
+on: [push, pull_request]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: nabucite
+          POSTGRES_DB: nabucite
+          POSTGRES_PASSWORD: ci-only
+        ports: ['55432:5432']
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - uses: actions/setup-node@v4
+        with: {node-version: '22'}
+      - uses: pnpm/action-setup@v4
+        with: {version: 10}
+      - run: cd frontend && pnpm install --frozen-lockfile && npm test && npm run build
+      - run: pip install -r backend/requirements-test.txt ruff
+      - run: cd backend && ruff format --check *.py migrations tests && ruff check *.py migrations tests && python -m pytest -q tests
+        env:
+          POSTGRES_PASSWORD: ci-only
+          NABUCITE_TEST_POSTGRES: '1'
